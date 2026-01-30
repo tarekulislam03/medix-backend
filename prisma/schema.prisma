@@ -244,6 +244,8 @@ model Product {
   @@index([name])
   @@index([category])
   @@index([expiryDate])
+  @@index([storeId, isActive]) // For filtering active products
+  @@index([storeId, quantity]) // For sorting by quantity
   @@map("products")
 }
 
@@ -336,6 +338,7 @@ model Bill {
   @@index([userId])
   @@index([billedAt])
   @@index([status])
+  @@index([storeId, status, billedAt]) // Composite index for dashboard date ranges
   @@map("bills")
 }
 
@@ -413,5 +416,6 @@ model Notification {
   @@index([status])
   @@index([type])
   @@index([createdAt])
+  @@index([storeId, status, userId]) // Composite index for fetching user notifications
   @@map("notifications")
 }

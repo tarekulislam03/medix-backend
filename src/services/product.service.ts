@@ -182,6 +182,21 @@ export const getProducts = async (
             skip,
             take: limit,
             orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                name: true,
+                genericName: true,
+                sku: true,
+                category: true,
+                sellingPrice: true,
+                quantity: true,
+                unit: true,
+                expiryDate: true,
+                manufacturer: true,
+                isActive: true,
+                createdAt: true,
+                // Exclude heavy fields like description, composition if they are large text
+            }
         }),
         prisma.product.count({ where }),
     ]);
@@ -279,16 +294,17 @@ export const deleteProduct = async (storeId: string, productId: string): Promise
  * Get low stock products
  */
 export const getLowStockProducts = async (storeId: string) => {
-    // Fetch all products and filter since Prisma doesn't support field-to-field comparison
-    const products = await prisma.product.findMany({
-        where: {
-            storeId,
-            isActive: true,
-        },
-        orderBy: { quantity: 'asc' },
-    });
+    // Use raw query for efficient comparison of two columns (quantity <= reorderLevel)
+    // This circumvents fetching all products into memory
+    const products = await prisma.$queryRaw<Product[]>`
+        SELECT * FROM "products"
+        WHERE "storeId" = ${storeId}::uuid
+        AND "isActive" = true
+        AND "quantity" <= "reorderLevel"
+        ORDER BY "quantity" ASC
+    `;
 
-    return products.filter((p: any) => p.quantity <= p.reorderLevel);
+    return products;
 };
 
 export default {

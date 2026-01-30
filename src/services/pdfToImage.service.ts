@@ -60,7 +60,10 @@ export const convertPdfToImages = async (pdfPath: string): Promise<string[]> => 
 
 export const processImage = async (imagePath: string): Promise<string> => {
     // Sharp preprocessing for better OCR
-    const processedPath = imagePath.replace(/(\.[\w\d_-]+)$/i, '_processed$1');
+    const dir = path.dirname(imagePath);
+    const ext = path.extname(imagePath);
+    const baseName = path.basename(imagePath, ext);
+    const processedPath = path.join(dir, `${baseName}_processed_${Date.now()}${ext || '.png'}`);
 
     await sharp(imagePath)
         .grayscale() // Convert to B&W

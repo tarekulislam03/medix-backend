@@ -1,13 +1,11 @@
 import prisma from '../config/database';
+import NodeCache from 'node-cache';
 
+const cache = new NodeCache({ stdTTL: 300 }); // Cache for 5 minutes
 
 // ============================================
 // TYPES
 // ============================================
-
-interface BillWithAmount {
-    totalAmount: any;
-}
 
 export interface TodaySales {
     totalAmount: number;
@@ -89,20 +87,19 @@ export const getTodaySales = async (storeId: string): Promise<TodaySales> => {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    // Today's sales
-    const todayBills = await prisma.bill.findMany({
+    // Aggregate Today
+    const todayStats = await prisma.bill.aggregate({
         where: {
             storeId,
             status: 'COMPLETED',
             billedAt: { gte: today },
         },
-        select: {
-            totalAmount: true,
-        },
+        _sum: { totalAmount: true },
+        _count: { id: true },
     });
 
-    // Yesterday's sales
-    const yesterdayBills = await prisma.bill.findMany({
+    // Aggregate Yesterday
+    const yesterdayStats = await prisma.bill.aggregate({
         where: {
             storeId,
             status: 'COMPLETED',
@@ -111,13 +108,12 @@ export const getTodaySales = async (storeId: string): Promise<TodaySales> => {
                 lt: today,
             },
         },
-        select: {
-            totalAmount: true,
-        },
+        _sum: { totalAmount: true },
     });
 
-    const todayTotal = todayBills.reduce((sum: number, bill: BillWithAmount) => sum + Number(bill.totalAmount), 0);
-    const yesterdayTotal = yesterdayBills.reduce((sum: number, bill: BillWithAmount) => sum + Number(bill.totalAmount), 0);
+    const todayTotal = Number(todayStats._sum.totalAmount || 0);
+    const todayBillsCount = todayStats._count.id;
+    const yesterdayTotal = Number(yesterdayStats._sum.totalAmount || 0);
 
     const amountChange = todayTotal - yesterdayTotal;
     const percentageChange = yesterdayTotal > 0
@@ -126,8 +122,8 @@ export const getTodaySales = async (storeId: string): Promise<TodaySales> => {
 
     return {
         totalAmount: todayTotal,
-        totalBills: todayBills.length,
-        averageOrderValue: todayBills.length > 0 ? Math.round(todayTotal / todayBills.length) : 0,
+        totalBills: todayBillsCount,
+        averageOrderValue: todayBillsCount > 0 ? Math.round(todayTotal / todayBillsCount) : 0,
         comparedToYesterday: {
             amountChange,
             percentageChange,
@@ -145,20 +141,19 @@ export const getMonthlySummary = async (storeId: string): Promise<MonthlySummary
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
-    // This month's bills
-    const thisMonthBills = await prisma.bill.findMany({
+    // This Month Stats
+    const thisMonthStats = await prisma.bill.aggregate({
         where: {
             storeId,
             status: 'COMPLETED',
             billedAt: { gte: startOfMonth },
         },
-        include: {
-            billItems: true,
-        },
+        _sum: { totalAmount: true },
+        _count: { id: true },
     });
 
-    // Last month's bills
-    const lastMonthBills = await prisma.bill.findMany({
+    // Last Month Stats
+    const lastMonthStats = await prisma.bill.aggregate({
         where: {
             storeId,
             status: 'COMPLETED',
@@ -167,37 +162,43 @@ export const getMonthlySummary = async (storeId: string): Promise<MonthlySummary
                 lte: endOfLastMonth,
             },
         },
-        select: {
-            totalAmount: true,
-        },
+        _sum: { totalAmount: true },
     });
 
-    const thisMonthTotal = thisMonthBills.reduce((sum: number, bill: any) => sum + Number(bill.totalAmount), 0);
-    const lastMonthTotal = lastMonthBills.reduce((sum: number, bill: BillWithAmount) => sum + Number(bill.totalAmount), 0);
+    const thisMonthTotal = Number(thisMonthStats._sum.totalAmount || 0);
+    const thisMonthBillsCount = thisMonthStats._count.id;
+    const lastMonthTotal = Number(lastMonthStats._sum.totalAmount || 0);
 
-    // Calculate top selling products
-    const productSales = new Map<string, { productId: string; productName: string; quantity: number; revenue: number }>();
+    // Optimized Top Selling Products (using GroupBy)
+    // Prisma does not support joining in groupBy easily, usually require aggregation on BillItem directly
+    // searching for items sold in the last 30 days/current month
+    const topProductsRaw = await prisma.billItem.groupBy({
+        by: ['productId', 'productName'],
+        where: {
+            storeId,
+            bill: {
+                status: 'COMPLETED',
+                billedAt: { gte: startOfMonth },
+            },
+        },
+        _sum: {
+            totalAmount: true,
+            quantity: true,
+        },
+        orderBy: {
+            _sum: {
+                totalAmount: 'desc',
+            },
+        },
+        take: 5,
+    });
 
-    for (const bill of thisMonthBills) {
-        for (const item of bill.billItems) {
-            const existing = productSales.get(item.productSku);
-            if (existing) {
-                existing.quantity += item.quantity;
-                existing.revenue += Number(item.totalAmount);
-            } else {
-                productSales.set(item.productSku, {
-                    productId: item.productId || '',
-                    productName: item.productName,
-                    quantity: item.quantity,
-                    revenue: Number(item.totalAmount),
-                });
-            }
-        }
-    }
-
-    const topSellingProducts = Array.from(productSales.values())
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 5);
+    const topSellingProducts = topProductsRaw.map(item => ({
+        productId: item.productId || 'unknown',
+        productName: item.productName,
+        quantity: item._sum.quantity || 0,
+        revenue: Number(item._sum.totalAmount || 0),
+    }));
 
     const amountChange = thisMonthTotal - lastMonthTotal;
     const percentageChange = lastMonthTotal > 0
@@ -206,8 +207,8 @@ export const getMonthlySummary = async (storeId: string): Promise<MonthlySummary
 
     return {
         totalAmount: thisMonthTotal,
-        totalBills: thisMonthBills.length,
-        averageOrderValue: thisMonthBills.length > 0 ? Math.round(thisMonthTotal / thisMonthBills.length) : 0,
+        totalBills: thisMonthBillsCount,
+        averageOrderValue: thisMonthBillsCount > 0 ? Math.round(thisMonthTotal / thisMonthBillsCount) : 0,
         topSellingProducts,
         comparedToLastMonth: {
             amountChange,
@@ -219,38 +220,64 @@ export const getMonthlySummary = async (storeId: string): Promise<MonthlySummary
 
 /**
  * Get sales per month graph data (last 12 months)
+ * Optimized using Raw Query for PostgreSQL date_trunc
  */
 export const getSalesGraphData = async (storeId: string): Promise<MonthlyGraphData[]> => {
+    // 12 months ago
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+    twelveMonthsAgo.setDate(1);
+    twelveMonthsAgo.setHours(0, 0, 0, 0);
+
+    // Using raw query for efficiency
+    // Group by month and year
+    const result: any[] = await prisma.$queryRaw`
+        SELECT 
+            TO_CHAR("billedAt", 'Mon') as month_name,
+            EXTRACT(MONTH FROM "billedAt") as month_num,
+            EXTRACT(YEAR FROM "billedAt") as year,
+            COUNT(id) as total_bills,
+            SUM("totalAmount") as total_amount
+        FROM "bills"
+        WHERE "storeId" = ${storeId}::uuid
+          AND "status" = 'COMPLETED'
+          AND "billedAt" >= ${twelveMonthsAgo}
+        GROUP BY year, month_num, month_name
+        ORDER BY year ASC, month_num ASC
+    `;
+
+    // Map to required format & fill missing months if needed (optional, but good for UI)
+    // The query returns only months with data. We should ensure all 12 months are present.
+
+    const dataMap = new Map();
+    result.forEach(r => {
+        const key = `${r.month_num}-${r.year}`;
+        dataMap.set(key, {
+            month: r.month_name,
+            year: Number(r.year),
+            totalAmount: Number(r.total_amount || 0),
+            totalBills: Number(r.total_bills || 0),
+        });
+    });
+
     const months: MonthlyGraphData[] = [];
     const now = new Date();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     for (let i = 11; i >= 0; i--) {
-        const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const startOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-        const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59);
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getMonth() + 1}-${d.getFullYear()}`;
 
-        const bills = await prisma.bill.findMany({
-            where: {
-                storeId,
-                status: 'COMPLETED',
-                billedAt: {
-                    gte: startOfMonth,
-                    lte: endOfMonth,
-                },
-            },
-            select: {
-                totalAmount: true,
-            },
-        });
-
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-        months.push({
-            month: monthNames[monthDate.getMonth()],
-            year: monthDate.getFullYear(),
-            totalAmount: bills.reduce((sum: number, bill: BillWithAmount) => sum + Number(bill.totalAmount), 0),
-            totalBills: bills.length,
-        });
+        if (dataMap.has(key)) {
+            months.push(dataMap.get(key));
+        } else {
+            months.push({
+                month: monthNames[d.getMonth()],
+                year: d.getFullYear(),
+                totalAmount: 0,
+                totalBills: 0,
+            });
+        }
     }
 
     return months;
@@ -260,11 +287,18 @@ export const getSalesGraphData = async (storeId: string): Promise<MonthlyGraphDa
  * Get recent bills
  */
 export const getRecentBills = async (storeId: string, limit = 10): Promise<RecentBill[]> => {
+    // Only select necessary fields
     const bills = await prisma.bill.findMany({
         where: { storeId },
         orderBy: { billedAt: 'desc' },
         take: limit,
-        include: {
+        select: {
+            id: true,
+            billNumber: true,
+            totalAmount: true,
+            paymentMethod: true,
+            status: true,
+            billedAt: true,
             customer: {
                 select: {
                     firstName: true,
@@ -272,9 +306,7 @@ export const getRecentBills = async (storeId: string, limit = 10): Promise<Recen
                 },
             },
             _count: {
-                select: {
-                    billItems: true,
-                },
+                select: { billItems: true },
             },
         },
     });
@@ -297,20 +329,20 @@ export const getRecentBills = async (storeId: string, limit = 10): Promise<Recen
  * Get notification counts
  */
 export const getNotificationCounts = async (storeId: string, userId?: string) => {
-    const baseWhere = {
+    const baseWhere: any = {
         storeId,
-        status: 'UNREAD' as const,
+        status: 'UNREAD',
     };
 
-    const where = userId
-        ? { ...baseWhere, OR: [{ userId }, { userId: null }] }
-        : baseWhere;
+    if (userId) {
+        baseWhere.OR = [{ userId }, { userId: null }];
+    }
 
     const [unreadCount, alertCount] = await Promise.all([
-        prisma.notification.count({ where }),
+        prisma.notification.count({ where: baseWhere }),
         prisma.notification.count({
             where: {
-                ...where,
+                ...baseWhere,
                 type: { in: ['ALERT', 'WARNING', 'EXPIRY', 'LOW_STOCK'] },
             },
         }),
@@ -324,29 +356,42 @@ export const getNotificationCounts = async (storeId: string, userId?: string) =>
 
 /**
  * Get inventory stats
+ * Optimized to avoid filtering in JS
  */
 export const getInventoryStats = async (storeId: string) => {
     const now = new Date();
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-    // Get all active products to calculate low stock
-    const products = await prisma.product.findMany({
-        where: { storeId, isActive: true },
-        select: {
-            quantity: true,
-            reorderLevel: true,
-            expiryDate: true,
+    // Use aggregations for counts
+    const totalProducts = await prisma.product.count({
+        where: { storeId, isActive: true }
+    });
+
+    // Expiring Count (Database Filter)
+    const expiringCount = await prisma.product.count({
+        where: {
+            storeId,
+            isActive: true,
+            expiryDate: {
+                gte: now,
+                lte: thirtyDaysFromNow,
+            },
         },
     });
 
-    const totalProducts = products.length;
-    const lowStockCount = products.filter((p: any) => p.quantity <= p.reorderLevel).length;
-    const expiringCount = products.filter((p: any) =>
-        p.expiryDate &&
-        p.expiryDate >= now &&
-        p.expiryDate <= thirtyDaysFromNow
-    ).length;
+    // Low Stock Count
+    // Since we cannot compare fields easily in count(), we check database support.
+    // Prisma usually doesn't support "quantity <= reorderLevel" in standard where.
+    // We can use queryRaw for speed.
+    const lowStockResult: any[] = await prisma.$queryRaw`
+        SELECT COUNT(*)::int as count 
+        FROM "products" 
+        WHERE "storeId" = ${storeId}::uuid
+          AND "isActive" = true
+          AND "quantity" <= "reorderLevel"
+    `;
+    const lowStockCount = lowStockResult[0]?.count || 0;
 
     return {
         totalProducts,
@@ -383,8 +428,16 @@ export const getCustomerStats = async (storeId: string) => {
 
 /**
  * Get complete dashboard data
+ * Implements Server-Side Caching
  */
 export const getDashboardStats = async (storeId: string, userId?: string): Promise<DashboardStats> => {
+    const cacheKey = `dashboard:${storeId}:${userId || 'all'}`;
+    const cachedData = cache.get<DashboardStats>(cacheKey);
+
+    if (cachedData) {
+        return cachedData;
+    }
+
     const [
         todaySales,
         monthlySummary,
@@ -403,7 +456,7 @@ export const getDashboardStats = async (storeId: string, userId?: string): Promi
         getCustomerStats(storeId),
     ]);
 
-    return {
+    const stats: DashboardStats = {
         todaySales,
         monthlySummary,
         salesGraphData,
@@ -412,12 +465,18 @@ export const getDashboardStats = async (storeId: string, userId?: string): Promi
         inventory,
         customers,
     };
+
+    // Store in cache
+    cache.set(cacheKey, stats);
+
+    return stats;
 };
 
 /**
  * Get store settings
  */
 export const getStoreSettings = async (storeId: string) => {
+    // Basic query, no heavy optimization needed unless fields are huge
     const store = await prisma.store.findUnique({
         where: { id: storeId },
         select: {
@@ -462,6 +521,11 @@ export const updateStoreSettings = async (storeId: string, data: {
         where: { id: storeId },
         data: updateData,
     });
+
+    // Invalidate cache when settings change (though stats might not rely on settings, better safe)
+    const cacheKeyPattern = `dashboard:${storeId}:*`;
+    const keys = cache.keys().filter(k => k.startsWith(`dashboard:${storeId}`));
+    cache.del(keys);
 
     return store;
 };

@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { convertPdfToImages, processImage } from '../services/pdfToImage.service';
-import { extractTextFromImage } from '../services/ocr.service';
-import { extractMedicinesFromText } from '../services/aiExtraction.service';
+import { convertPdfToImages } from '../services/pdfToImage.service';
+import { extractMedicinesFromImage, extractTextFromImage, parseBillText } from '../services/openRouterExtraction.service';
 import { normalizeMedicineName } from '../services/medicineNormalize.service';
 import prisma from '../config/database';
 
@@ -24,37 +23,44 @@ export const importBill = async (req: Request, res: Response): Promise<void> => 
                 const pdfImages = await convertPdfToImages(filePath);
                 tempImages.push(...pdfImages);
             } else if (mimeType.startsWith('image/')) {
-                // Process directly
-                const processed = await processImage(filePath);
-                tempImages.push(processed); // Use processed image
-                // Or just use original if we want simplicity, but preprocessing is requested.
+                // Process directly - use original for better quality with vision model
+                tempImages.push(filePath);
             } else {
                 throw new Error('Unsupported file type');
             }
 
-            // 2. OCR Extraction (Accumulate text from all pages)
-            let fullText = '';
-            for (const imgPath of tempImages) {
-                const text = await extractTextFromImage(imgPath);
-                fullText += text + '\n';
+            // 2. Use OpenRouter Vision + AI Pipeline
+            let allItems: any[] = [];
+            let invoiceData: any = {};
 
-                // Cleanup processed image
-                try { fs.unlinkSync(imgPath); } catch (e) { }
+            for (const imgPath of tempImages) {
+                // Extract text using OpenRouter Vision (google/gemma-3-27b-it:free)
+                const text = await extractTextFromImage(imgPath);
+
+                // Parse text to JSON using OpenRouter AI (arcee-ai/trinity-large-preview:free)
+                const parsed = await parseBillText(text);
+
+                // Accumulate items
+                allItems.push(...parsed.items);
+
+                // Keep invoice metadata from first page
+                if (!invoiceData.invoiceNumber && parsed.invoiceNumber) {
+                    invoiceData = {
+                        invoiceNumber: parsed.invoiceNumber,
+                        invoiceDate: parsed.invoiceDate,
+                        supplierName: parsed.supplierName,
+                        totalAmount: parsed.totalAmount
+                    };
+                }
+
+                // Cleanup processed image (but not original file, handled in finally)
+                if (imgPath !== filePath) {
+                    try { fs.unlinkSync(imgPath); } catch (e) { }
+                }
             }
 
-            // 3. AI Extraction
-            const rawMedicines = await extractMedicinesFromText(fullText);
-
-            // 4. Normalize & Structure
-            // Also try to find a match status
-            // We can check if "normalized name" matches an existing product key
-
-            // To do this efficiently, we might need to fetch all product names (or a subset)
-            // But for a simple preview, we just return the cleaned data and let Frontend handle "Matching" logic 
-            // OR we can do a quick check here. The User Step 9 says "Preview before save".
-            // The previous implementation used Fuse.js on backend. We can replicate that if we want "Matched" status.
-
-            const normalizedItems = rawMedicines.map(item => ({
+            // 3. Normalize medicine names
+            const normalizedItems = allItems.map(item => ({
                 ...item,
                 original_name: item.medicine_name,
                 medicine_name: normalizeMedicineName(item.medicine_name),
@@ -62,7 +68,8 @@ export const importBill = async (req: Request, res: Response): Promise<void> => 
 
             res.status(200).json({
                 success: true,
-                data: normalizedItems
+                data: normalizedItems,
+                invoice: invoiceData
             });
 
         } finally {

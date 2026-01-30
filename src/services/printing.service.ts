@@ -9,10 +9,10 @@ interface BillData extends Bill {
   biller?: User | null;
 }
 
-type PrintSize = '58mm' | '80mm'; // 90mm usually refers to 80mm standard or similar. I'll support 80mm/90mm via wide layout.
+type PrintSize = '58mm' | '80mm' | '90mm';
 
 const generateBillHtml = (bill: BillData, size: PrintSize): string => {
-  const width = size === '58mm' ? '58mm' : '80mm';
+  const width = size;
   const fontSize = size === '58mm' ? '12px' : '14px';
 
   return `
@@ -170,7 +170,7 @@ export const generateBillPdf = async (billData: BillData, size: PrintSize): Prom
     await page.setContent(html, { waitUntil: 'networkidle0' });
 
     const pdfBuffer = await page.pdf({
-      width: size === '58mm' ? '58mm' : '80mm',
+      width: size,
       printBackground: true,
       height: 'auto',
       margin: {
