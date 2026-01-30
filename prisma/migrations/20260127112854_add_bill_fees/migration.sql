@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "bills" ADD COLUMN     "doctorFees" DECIMAL(10,2) NOT NULL DEFAULT 0,
+ADD COLUMN     "otherCharges" DECIMAL(10,2) NOT NULL DEFAULT 0;
