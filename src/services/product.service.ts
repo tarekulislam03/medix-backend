@@ -148,7 +148,6 @@ export const getProducts = async (
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
         where.expiryDate = {
-            gte: today,
             lte: thirtyDaysFromNow,
         };
     }
