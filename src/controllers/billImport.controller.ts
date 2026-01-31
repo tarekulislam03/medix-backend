@@ -149,6 +149,6 @@ const parseExpiryDate = (dateStr: string): Date | undefined => {
 export const importBill = async (req: Request, res: Response): Promise<void> => {
     res.status(410).json({
         success: false,
-        message: 'This endpoint is deprecated. Please use the text-extractor service at http://localhost:3000/api/extract'
+        message: 'This endpoint is deprecated. Please use the text-extractor service at https://auto-product-importrer.onrender.com/api/extract'
     });
 };
