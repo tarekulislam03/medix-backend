@@ -374,6 +374,7 @@ export const getInventoryStats = async (storeId: string) => {
             storeId,
             isActive: true,
             expiryDate: {
+                not: null,
                 lte: ninetyDaysFromNow,
             },
         },

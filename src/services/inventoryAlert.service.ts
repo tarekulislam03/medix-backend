@@ -67,6 +67,7 @@ const checkExpiringProducts = async (storeId: string) => {
             storeId,
             isActive: true,
             expiryDate: {
+                not: null,
                 lte: ninetyDaysFromNow,
             },
         },
