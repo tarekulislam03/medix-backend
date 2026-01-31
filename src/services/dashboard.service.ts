@@ -360,8 +360,8 @@ export const getNotificationCounts = async (storeId: string, userId?: string) =>
  */
 export const getInventoryStats = async (storeId: string) => {
     const now = new Date();
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const ninetyDaysFromNow = new Date();
+    ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
     // Use aggregations for counts
     const totalProducts = await prisma.product.count({
@@ -374,7 +374,7 @@ export const getInventoryStats = async (storeId: string) => {
             storeId,
             isActive: true,
             expiryDate: {
-                lte: thirtyDaysFromNow,
+                lte: ninetyDaysFromNow,
             },
         },
     });

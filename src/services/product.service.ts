@@ -144,11 +144,11 @@ export const getProducts = async (
 
     if (filter.expiring) {
         const today = new Date();
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        const ninetyDaysFromNow = new Date();
+        ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
         where.expiryDate = {
-            lte: thirtyDaysFromNow,
+            lte: ninetyDaysFromNow,
         };
     }
 

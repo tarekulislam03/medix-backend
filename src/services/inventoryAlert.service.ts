@@ -59,15 +59,15 @@ const checkLowStock = async (storeId: string) => {
  */
 const checkExpiringProducts = async (storeId: string) => {
     const now = new Date();
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const ninetyDaysFromNow = new Date();
+    ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
     const expiringProducts = await prisma.product.findMany({
         where: {
             storeId,
             isActive: true,
             expiryDate: {
-                lte: thirtyDaysFromNow,
+                lte: ninetyDaysFromNow,
             },
         },
     });
