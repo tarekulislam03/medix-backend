@@ -188,14 +188,18 @@ export const getProducts = async (
                 genericName: true,
                 sku: true,
                 category: true,
+                costPrice: true,      // Added
                 sellingPrice: true,
+                mrp: true,            // Added
+                taxPercent: true,     // Added
                 quantity: true,
                 unit: true,
+                batchNumber: true,    // Added
                 expiryDate: true,
+                reorderLevel: true,   // Added
                 manufacturer: true,
                 isActive: true,
                 createdAt: true,
-                // Exclude heavy fields like description, composition if they are large text
             }
         }),
         prisma.product.count({ where }),

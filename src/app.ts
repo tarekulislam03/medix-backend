@@ -25,8 +25,15 @@ import billImportRoutes from './routes/billImport.routes';
 const app: Application = express();
 
 // Middleware
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5176',
+    process.env.CORS_ORIGIN || ''
+].filter(Boolean);
+
+// Middleware
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
 }));
