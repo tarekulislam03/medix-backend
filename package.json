@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/server.ts",
-    "build": "tsc",
+    "build": "npx tsc",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -51,14 +51,14 @@
     "puppeteer-core": "^24.36.1",
     "sharp": "^0.34.5",
     "tesseract.js": "^7.0.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "typescript": "^5.9.3",
+    "ts-node": "^10.9.2"
   },
   "devDependencies": {
     "@vercel/node": "^5.5.28",
     "nodemon": "^3.1.11",
     "prisma": "^7.3.0",
-    "puppeteer": "^24.36.1",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "puppeteer": "^24.36.1"
   }
 }
