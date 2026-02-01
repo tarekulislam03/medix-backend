@@ -280,7 +280,7 @@ export const sendPasswordResetOTP = async (email: string, otp: string, firstName
 
 export const sendContactFormEmail = async (name: string, email: string, phone: string, message: string): Promise<boolean> => {
     // Admin email - configured to receive leads
-    const ADMIN_EMAIL = 'medix.pos@gmail.com';
+    const ADMIN_EMAIL = 'techcodex.hub@gmail.com';
 
     const html = `
     <!DOCTYPE html>
