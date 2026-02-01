@@ -20,6 +20,7 @@ import customerRoutes from './routes/customer.routes';
 import printingRoutes from './routes/printing.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import billImportRoutes from './routes/billImport.routes';
+import contactRoutes from './routes/contact.routes';
 
 // Create Express application
 const app: Application = express();
@@ -83,6 +84,7 @@ app.use('/api/v1/customers', customerRoutes);
 app.use('/api/v1/printing', printingRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/inventory', billImportRoutes);
+app.use('/api/v1/contact', contactRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

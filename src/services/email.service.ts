@@ -278,9 +278,50 @@ export const sendPasswordResetOTP = async (email: string, otp: string, firstName
     });
 };
 
+export const sendContactFormEmail = async (name: string, email: string, phone: string, message: string): Promise<boolean> => {
+    // Admin email - configured to receive leads
+    const ADMIN_EMAIL = 'medix.pos@gmail.com';
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>New Contact Form Submission</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+            <h2 style="color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px;">New Contact Submission</h2>
+            
+            <p><strong>From:</strong> ${name}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
+            
+            <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin-top: 20px;">
+                <h3 style="margin-top: 0; color: #555;">Message:</h3>
+                <p style="white-space: pre-wrap;">${message}</p>
+            </div>
+            
+            <p style="font-size: 12px; color: #888; margin-top: 30px; text-align: center;">
+                Sent via MediX POS Landing Page
+            </p>
+        </div>
+    </body>
+    </html>
+    `;
+
+    return sendEmail({
+        to: ADMIN_EMAIL,
+        subject: `New Contact from ${name} - MediX POS`,
+        html,
+        text: `Name: ${name}\nEmail: ${email}\nPhone: ${phone}\nMessage: ${message}`
+    });
+};
+
 export default {
     sendEmail,
     sendVerificationOTP,
     sendPasswordResetEmail,
     sendPasswordResetOTP,
+    sendContactFormEmail
 };
