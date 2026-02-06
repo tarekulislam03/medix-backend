@@ -257,17 +257,15 @@ export const login = async (input: LoginInput): Promise<AuthResponse> => {
         throw new Error('Email not verified. A new verification code has been sent to your email.');
     }
 
-    // Get active subscription
+    // Get latest subscription (active, expired, or cancelled)
     const subscription = await prisma.subscription.findFirst({
-        where: {
-            storeId: user.storeId,
-            status: SubscriptionStatus.ACTIVE,
-        },
+        where: { storeId: user.storeId },
         orderBy: { createdAt: 'desc' },
     });
 
     if (!subscription) {
-        throw new Error('No active subscription found. Please contact support.');
+        // This should theoretically not happen if registration transaction worked
+        throw new Error('No subscription record found. Please contact support.');
     }
 
     // Update last login
@@ -459,17 +457,14 @@ export const verifyOTP = async (email: string, otp: string): Promise<AuthRespons
         },
     });
 
-    // Get active subscription
+    // Get latest subscription (active, expired, or cancelled)
     const subscription = await prisma.subscription.findFirst({
-        where: {
-            storeId: user.storeId,
-            status: SubscriptionStatus.ACTIVE,
-        },
+        where: { storeId: user.storeId },
         orderBy: { createdAt: 'desc' },
     });
 
     if (!subscription) {
-        throw new Error('No active subscription found');
+        throw new Error('No subscription record found');
     }
 
     // Generate tokens for auto-login
