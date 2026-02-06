@@ -264,11 +264,13 @@ export const changePlan = async (
 
     // Create new subscription (deactivate old ones)
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        // Mark all existing subscriptions as cancelled
+        // Mark all existing subscriptions as cancelled or expired to ensure clean slate
         await tx.subscription.updateMany({
             where: {
                 storeId,
-                status: SubscriptionStatus.ACTIVE,
+                status: {
+                    in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED, SubscriptionStatus.SUSPENDED]
+                }
             },
             data: {
                 status: SubscriptionStatus.CANCELLED,
